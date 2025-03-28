@@ -1,26 +1,47 @@
-import { Injectable } from '@nestjs/common';
-import { CreateAuthDto } from './dto/create-auth.dto';
-import { UpdateAuthDto } from './dto/update-auth.dto';
+import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { PrismaClient } from '@prisma/client';
+import { UsersService } from 'src/users/users.service';
+import { RegisterDto } from './dto/register.dto';
+import { JwtService } from '@nestjs/jwt';
+import { compare } from 'bcrypt';
+import { LoginDto } from './dto/login.dto';
 
 @Injectable()
 export class AuthService {
-  create(createAuthDto: CreateAuthDto) {
-    return 'This action adds a new auth';
-  }
+    constructor (
+        private readonly prisma: PrismaClient, 
+        private readonly usersService:UsersService,
+        private readonly jwtService: JwtService,
+    ){}
 
-  findAll() {
-    return `This action returns all auth`;
-  }
 
-  findOne(id: number) {
-    return `This action returns a #${id} auth`;
-  }
+    async register(registerDto: RegisterDto){
+        const user = await this.usersService.create(registerDto);
+        const token= await this.jwtService.signAsync(user);
+        return {token};
+    }
 
-  update(id: number, updateAuthDto: UpdateAuthDto) {
-    return `This action updates a #${id} auth`;
-  }
 
-  remove(id: number) {
-    return `This action removes a #${id} auth`;
-  }
+    async login(loginDto: LoginDto){
+        const user=await this.prisma.user.findFirst({
+      where: {
+        OR: [
+            {email: loginDto.username,},
+            {mobile: loginDto.username},
+        ],
+      },
+        });
+        if(!user){
+            throw new NotFoundException('Unable to find the user')
+        }
+        const isPasswordValid = await compare(loginDto.password,user.password);
+        if(!isPasswordValid)
+        {
+            throw new UnauthorizedException('Inavalid Credentials');
+        }
+
+        const token = await this.jwtService.signAsync(user);
+        return {token};
+    }
+    
 }
